@@ -3,22 +3,28 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from .store import load_tasks, next_task_id, save_tasks
+from .schemas import TaskStatus
+from .store import load_tasks, next_task_id, save_tasks, update_task
 
 
-def list_tasks(status: str | None = None, q: str | None = None) -> list[dict[str, Any]]:
+def list_tasks(
+    status: TaskStatus | str | None = None, q: str | None = None
+) -> list[dict[str, Any]]:
     """Return task records, optionally filtered by status and search text."""
     tasks = load_tasks()
     filtered: list[dict[str, Any]] = []
+    status_value = status.value if isinstance(status, TaskStatus) else status
+    query = q.casefold() if q is not None else None
 
     for task in tasks:
-        # Instructor note: intentional bug for the lab.
-        # This uses the literal string "status" instead of the query parameter value.
-        if status and task["status"] != "status":
+        if status_value and task["status"] != status_value:
             continue
 
-        # Instructor note: partial feature for the lab.
-        # The route already accepts `q`, but search is not implemented yet.
+        if query and not any(
+            query in task[field].casefold() for field in ("title", "description")
+        ):
+            continue
+
         filtered.append(task)
 
     return filtered
@@ -49,16 +55,10 @@ def create_task(payload: dict[str, Any]) -> dict[str, Any]:
 
 def complete_task(task_id: int) -> dict[str, Any] | None:
     """Mark a task as completed."""
-    tasks = load_tasks()
-
-    for task in tasks:
-        if task["id"] == task_id:
-            updated_task = dict(task)
-            updated_task["status"] = "done"
-            updated_task["completed_at"] = datetime.now(timezone.utc).isoformat()
-
-            # Instructor note: intentional bug for the lab.
-            # The updated task is returned, but the stored list is never updated or saved.
-            return updated_task
-
-    return None
+    return update_task(
+        task_id,
+        {
+            "status": TaskStatus.done.value,
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
